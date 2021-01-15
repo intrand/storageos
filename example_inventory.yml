@@ -1,0 +1,28 @@
+# This is just a copy of the k3s example inventory.
+# You do not need to follow this strictly.
+# Simply give any ansible_play_hosts that includes
+# the nodes of your storageos cluster. Typically,
+# you'd do that by creating a group and limiting
+# ansible to that group.
+prod:
+  children:
+
+    # k3s nodes running the control plane
+    k3s_managers:
+      hosts:
+        k3s0.lan:
+        k3s1.lan:
+        k3s2.lan:
+
+    # k3s nodes that don't run the control plane
+    k3s_workers:
+      hosts:
+        k3s3.lan:
+        k3s4.lan:
+        k3s5.lan:
+
+    # k3s represents the entire k3s cluster
+    k3s:
+      children:
+        k3s_managers:
+        k3s_workers:

@@ -1,0 +1,38 @@
+---
+# https://docs.storageos.com/docs/install/kubernetes
+- name: grab operator manifest
+  get_url:
+    url: https://github.com/storageos/cluster-operator/releases/download/v2.3.1/storageos-operator.yaml
+    dest: /tmp/storageos-operator.yaml
+    owner: root
+    group: root
+    mode: 0644
+  run_once: yes
+
+- name: check if storageos-operator already exists
+  k8s_info:
+    api_version: v1
+    kind: Pod
+    kubeconfig: "{{ kubeconfig }}"
+    namespace: "{{ operator_namespace }}"
+  register: pods
+  run_once: yes
+
+- name: apply operator manifest
+  k8s:
+    kubeconfig: "{{ kubeconfig }}"
+    src: /tmp/storageos-operator.yaml
+  run_once: yes
+  when: pods.resources | json_query(query_pods) | selectattr('name', 'contains', 'storageos-cluster-operator-') | selectattr('phase', 'equalto', 'Running') | list | length == 0
+
+- name: wait for storageos-operator pod to ready (thirty seconds max)
+  k8s_info:
+    api_version: v1
+    kind: Pod
+    kubeconfig: "{{ kubeconfig }}"
+    namespace: "{{ operator_namespace }}"
+  delay: 3
+  register: pods
+  retries: 10
+  run_once: yes
+  until: pods.resources | json_query(query_pods) | selectattr('name', 'contains', 'storageos-cluster-operator-') | selectattr('phase', 'equalto', 'Running') | list | length == 1

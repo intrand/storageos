@@ -1,0 +1,31 @@
+---
+- name: storageos cluster
+  k8s:
+    kubeconfig: "{{ kubeconfig }}"
+    state: present
+    definition: |
+      apiVersion: "storageos.com/v1"
+      kind: StorageOSCluster
+      metadata:
+        name: "{{ storageos_cluster }}"
+        namespace: "{{ operator_namespace }}"
+      spec:
+        # StorageOS Pods are in kube-system by default
+        secretRefName: "storageos-api" # Reference from the Secret created in the previous step
+        secretRefNamespace: "storageos-operator"  # Namespace of the Secret
+        k8sDistro: "upstream"
+        images:
+          nodeContainer: "storageos/node:v2.3.2" # StorageOS version
+        kvBackend:
+          address: 'storageos-etcd-client.storageos-etcd:2379' # Example address, change for your etcd endpoint
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: 1
+      #  nodeSelectorTerms:
+      #    - matchExpressions:
+      #      - key: "node-role.kubernetes.io/worker" # Compute node label will vary according to your installation
+      #        operator: In
+      #        values:
+      #        - "true"
+  run_once: yes

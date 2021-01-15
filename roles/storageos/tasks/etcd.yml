@@ -1,0 +1,195 @@
+---
+# https://docs.storageos.com/docs/prerequisites/etcd
+# https://github.com/cbws/etcd-operator/tree/v0.10.0
+# https://github.com/cbws/etcd-operator/tree/v0.10.0/example
+- name: etcd namespace
+  k8s:
+    api_version: v1
+    kind: Namespace
+    kubeconfig: "{{ kubeconfig }}"
+    name: "{{ etcd_namespace }}"
+    state: present
+  run_once: yes
+
+- name: crb
+  k8s:
+    kubeconfig: "{{ kubeconfig }}"
+    state: present
+    definition: |
+      apiVersion: rbac.authorization.k8s.io/v1beta1
+      kind: ClusterRoleBinding
+      metadata:
+        name: etcd-operator
+      roleRef:
+        apiGroup: rbac.authorization.k8s.io
+        kind: ClusterRole
+        name: etcd-operator
+      subjects:
+        - kind: ServiceAccount
+          name: default
+          namespace: "{{ etcd_namespace }}"
+  run_once: yes
+
+- name: cr
+  k8s:
+    kubeconfig: "{{ kubeconfig }}"
+    state: present
+    definition: |
+      apiVersion: rbac.authorization.k8s.io/v1beta1
+      kind: ClusterRole
+      metadata:
+        name: etcd-operator
+      rules:
+      - apiGroups:
+        - etcd.database.coreos.com
+        resources:
+        - etcdclusters
+        - etcdbackups
+        - etcdrestores
+        verbs:
+        - "*"
+      - apiGroups:
+        - apiextensions.k8s.io
+        resources:
+        - customresourcedefinitions
+        verbs:
+        - "*"
+      - apiGroups:
+        - ""
+        resources:
+        - pods
+        - services
+        - endpoints
+        - persistentvolumeclaims
+        - events
+        verbs:
+        - "*"
+      - apiGroups:
+        - apps
+        resources:
+        - deployments
+        verbs:
+        - "*"
+      # The following permissions can be removed if not using S3 backup and TLS
+      - apiGroups:
+        - ""
+        resources:
+        - secrets
+        verbs:
+        - get
+  run_once: yes
+
+- name: "get deployments in {{ etcd_namespace }}"
+  k8s_info:
+    api_version: v1
+    kind: Deployment
+    kubeconfig: "{{ kubeconfig }}"
+    namespace: "{{ etcd_namespace }}"
+  register: deployments
+  run_once: yes
+
+- name: etcd operator
+  k8s:
+    kubeconfig: "{{ kubeconfig }}"
+    namespace: "{{ etcd_namespace }}"
+    state: present
+    definition: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: etcd-operator
+      spec:
+        selector:
+          matchLabels:
+            app: etcd-operator
+        replicas: 1
+        template:
+          metadata:
+            labels:
+              app: etcd-operator
+          spec:
+            containers:
+            - name: etcd-operator
+              image: docker.io/cbws/etcd-operator:v0.10.0
+              command:
+              - etcd-operator
+              env:
+              - name: MY_POD_NAMESPACE
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.namespace
+              - name: MY_POD_NAME
+                valueFrom:
+                  fieldRef:
+                    fieldPath: metadata.name
+  run_once: yes
+  when: not 'etcd-operator' in deployments.resources | json_query(query_deployments_names)
+
+- name: wait for etcd-operator pod to ready (thirty seconds max)
+  k8s_info:
+    api_version: v1
+    kind: Pod
+    kubeconfig: "{{ kubeconfig }}"
+    namespace: "{{ etcd_namespace }}"
+  delay: 3
+  register: pods
+  retries: 10
+  run_once: yes
+  until: pods.resources | json_query(query_pods) | selectattr('name', 'contains', 'etcd-operator-') | selectattr('phase', 'equalto', 'Running') | list | length == 1
+
+- name: etcd cluster
+  k8s:
+    kubeconfig: "{{ kubeconfig }}"
+    namespace: "{{ etcd_namespace }}"
+    state: present
+    definition: |
+      apiVersion: "etcd.database.coreos.com/v1beta2"
+      kind: "EtcdCluster"
+      metadata:
+        name: "storageos-etcd"
+      spec:
+        size: 3
+        version: "3.4.7"
+        pod:
+          etcdEnv:
+          - name: ETCD_QUOTA_BACKEND_BYTES
+            value: "2147483648"  # 2 GB
+          - name: ETCD_AUTO_COMPACTION_RETENTION
+            value: "1000" # Keep 1000 revisions (default)
+          - name: ETCD_AUTO_COMPACTION_MODE
+            value: "revision" # Set the revision mode
+          resources:
+            requests:
+              cpu: 200m
+              memory: 300Mi
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 9000
+            fsGroup: 9000
+          tolerations:
+          - operator: "Exists"
+          affinity:
+            podAntiAffinity:
+              preferredDuringSchedulingIgnoredDuringExecution:
+              - weight: 100
+                podAffinityTerm:
+                  labelSelector:
+                    matchExpressions:
+                    - key: etcd_cluster
+                      operator: In
+                      values:
+                      - storageos-etcd
+                  topologyKey: kubernetes.io/hostname
+  run_once: yes
+
+- name: wait for etcd pods to ready (one minute max)
+  k8s_info:
+    api_version: v1
+    kind: Pod
+    kubeconfig: "{{ kubeconfig }}"
+    namespace: "{{ etcd_namespace }}"
+  delay: 6
+  register: pods
+  retries: 10
+  run_once: yes
+  until: pods.resources | json_query(query_pods) | selectattr('name', 'contains', 'storageos-etcd-') | list | length == 3

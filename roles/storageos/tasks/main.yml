@@ -1,0 +1,9 @@
+---
+# https://docs.storageos.com/docs/prerequisites
+- include_tasks: packages.yml
+- include_tasks: etcd.yml
+
+# https://docs.storageos.com/docs/install/kubernetes
+- include_tasks: storageos-operator.yml
+- include_tasks: storageos-config.yml
+- include_tasks: storageos-cluster.yml

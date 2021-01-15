@@ -1,0 +1,27 @@
+---
+- name: configure storageos cluster
+  k8s:
+    kubeconfig: "{{ kubeconfig }}"
+    state: present
+    definition: |
+      apiVersion: v1
+      kind: Secret
+      metadata:
+        name: "storageos-api"
+        namespace: "{{ operator_namespace }}"
+        labels:
+          app: "storageos"
+      type: "kubernetes.io/storageos"
+      data:
+        apiUsername: "{{ storageos_username | b64encode }}"
+        apiPassword: "{{ storageos_password | b64encode }}"
+        # CSI Credentials
+        csiProvisionUsername: "{{ storageos_username | b64encode }}"
+        csiProvisionPassword: "{{ storageos_password | b64encode }}"
+        csiControllerPublishUsername: "{{ storageos_username | b64encode }}"
+        csiControllerPublishPassword: "{{ storageos_password | b64encode }}"
+        csiNodePublishUsername: "{{ storageos_username | b64encode }}"
+        csiNodePublishPassword: "{{ storageos_password | b64encode }}"
+        csiControllerExpandUsername: "{{ storageos_username | b64encode }}"
+        csiControllerExpandPassword: "{{ storageos_password | b64encode }}"
+  run_once: yes

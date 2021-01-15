@@ -1,0 +1,16 @@
+---
+# https://docs.storageos.com/docs/prerequisites/systemconfiguration
+- name: install packages
+  apt:
+    name: "linux-modules-{{ ansible_kernel }}"
+    state: present
+  when: ansible_pkg_mgr == "apt"
+
+# https://docs.storageos.com/docs/reference/cli
+- name: get storageos CLI utility
+  get_url:
+    url: https://github.com/storageos/go-cli/releases/download/v2.3.0/storageos_linux_amd64
+    dest: /usr/local/bin/storageos
+    owner: root
+    group: root
+    mode: 0755

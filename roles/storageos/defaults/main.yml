@@ -1,0 +1,12 @@
+---
+# configurable
+etcd_namespace: storageos-etcd
+operator_namespace: storageos-operator
+storageos_username: storageos
+storageos_password: storageos
+storageos_cluster: storageos
+
+# don't touch
+kubeconfig: /etc/rancher/k3s/k3s.yaml
+query_pods: "[].{name: metadata.name, phase: status.phase}"
+query_deployments_names: "[].metadata.name"
